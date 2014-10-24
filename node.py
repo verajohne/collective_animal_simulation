@@ -21,36 +21,20 @@ STIME = 0.1
 KNN_K = 4
 VISUAL_FIELD = (270)*(np.pi/180)
 REPULSE_MAGNITUDE = 1
-ATTRACTION_MAGNITUDE = 1
-
+ATTRACTION_MAGNITUDE = 10
 FLOCK_RADIUS = 5
-
 
 ####################################################
 def distance_between_points(node_0, node_1):
 	dist = sqrt((node_0[0] - node_1[0])**2 + (node_0[1] - node_1[1])**2)
 	return dist
 
-def distance_between_nodes(node_0, node_1):
-	dist = sqrt( ((node_0.position_vector[0]) - (node_1.position_vector[0]))**2 + ((node_0.position_vector[1]) - (node_1.position_vector[1]))**2 )
-	return dist
-
 def is_within_flock_radius(node, center_of_mass, radius = FLOCK_RADIUS):
 	dist = distance_between_points(node.position_vector, center_of_mass)
-	#b = dist < radius
 	return dist < radius
 
-def angele_between_nodes(o1, o2):
-	#o = orientation
-	v1 = np.array([np.cos(o1), np.sin(o1)])
-	v2 = np.array([np.cos(o2), np.sin(o2)])
-	angle = np.arccos((np.dot(v1,v2)))
-	return angle
-
-def visionary_field(orientation):
-	return [(orientation - VISIONARY_FIELD/2), ((orientation + VISIONARY_FIELD/2))]
-
 def position_vector_to_angle(unit_vector):
+	'''returns positive angles '''
 	x = unit_vector[0]
 	y = unit_vector[1]
 	phi = 0
@@ -60,20 +44,28 @@ def position_vector_to_angle(unit_vector):
 		else:
 			phi = np.pi*3/2
 	else:
-		temp = y/x
-		temp = np.arctan(temp)
+		phi = np.arctan(y/x)	# x > 0, y >0 || x > 0, y==0
 		if x < 0:
-			phi = np.pi + temp
+			phi = phi + np.pi
 		else:
-			phi = temp
+			if y < 0: # x > 0, y < 0
+				phi = phi + 2*np.pi
+
 	return phi
 
+def add_angles(o1,o2):
+	res = o1 + o2
+	while res > 2*np.pi or res == 2*np.pi:
+		res -= 2*np.pi
+	return res
+def sub_angles(o1,o2):
+	res = o1 - o2
+	while res < 2*np.pi or res == 2*np.pi:
+		res += 2*np.pi
+	return res
 
 ####################################################
-'''TODO::
-FIX ATTRACTION FUNCTION
 
-'''
 
 class Node:
 	def __init__(self, position, orientation, speed = SPEED, graph = None):
@@ -94,9 +86,11 @@ class Node:
 		factor = 1
 
 		if (len(knn_repulse) == 0) & (len(knn) == 0):
-			#no near neighbors, orient to see flock
-			self.orientation = self.orient(nodes)
-			return
+			''' Cant see any neighbors. 
+			Orient to avg '''
+			self.orientation = position_vector_to_angle(self.attract(knn, com = None))
+			knn = nodes
+			#return
 		if len(knn_repulse) > 0:
 			new_direction = self.repulse(knn_repulse)
 			factor = 2
@@ -116,7 +110,7 @@ class Node:
 			v = (node.position_vector - self.position_vector)
 			norm = np.linalg.norm(v)
 			v = v/norm
-			intensity = 1/distance_between_nodes(self, node)
+			intensity = 1/(distance_between_points(self.position_vector, node.position_vector))**2
 			v = intensity*v
 			repulse += v
 		temp = np.array([-1,-1])
@@ -125,22 +119,28 @@ class Node:
 		return repulse
 
 	def attract(self, knn_attract, com):
-		''' returns unit vector of '''
+		''' returns unit vector weighted avg relative vector according to inverse square law'''
 		attract = np.zeros(2)
+		
+
+
 		for node in knn_attract:
 			v = node.position_vector - self.position_vector
-			norm = np.linalg.norm(v)
-			v = v/norm
-			intensity = 1/distance_between_nodes(self, node)
-			v = intensity*v
+			dist = distance_between_points(node.position_vector, self.position_vector)
+			if dist != 0:	
+				norm = np.linalg.norm(v)
+				v = v/norm
+				intensity = 1/(dist)**2
+				v = intensity*v
 			attract += v
 		if com != None:
-			v = com - self.position_vector
+			#node outside flock radius
 			dist = distance_between_points(com, self.position_vector)
+			v = com - self.position_vector
 			if dist != 0:
 				v = v/norm
-				intensity = 2*(1/dist)
-				attract += v
+				intensity = 2*(1/dist**2)
+				attract += intensity*v
 		#attract = attract*(1/len(knn_attract))
 		attract /= np.linalg.norm(attract)
 
@@ -171,60 +171,43 @@ class Graph:
 			cm += node.position_vector
 		return cm
 
-
 	def knn_visual(self, node):
+		'''
+			todo:
+				-only KNN visual
+		'''
 		print "KNN VISUAL"
 		knn_visual_nodes = []
 		knn_repulse = []
 
 		radius = 20
 		ori = node.orientation
-		sigma = ori - VISUAL_FIELD/2
-		lba = sigma
-		uba = sigma + VISUAL_FIELD 
+
+		lba = sub_angles(ori, VISUAL_FIELD/2)
+		uba = add_angles(lba, VISUAL_FIELD)
 		print lba, uba
  		
 		for node_1 in self.nodes:
-			dist = distance_between_nodes(node,node_1)
+			dist = distance_between_points(node.position_vector,node_1.position_vector)
 			if dist == 0:
 				break
 			v = node_1.position_vector - node.position_vector
 			phi = position_vector_to_angle(v)
 
-			if (phi > lba) & (phi < uba ):
-				knn_visual_nodes.append(node_1)
+			if lba < uba:
+				if (phi > lba) & (phi < uba ):
+					knn_visual_nodes.append(node_1)
+				if dist < SEPERATION_TRESHOLD:
+					knn_repulse.append(node_1)
+			else:
+				if ( (lba < phi) & (phi < np.pi) ) or ( (0 < phi) & (phi < uba) ):
+					knn_visual_nodes.append(node_1)
 				if dist < SEPERATION_TRESHOLD:
 					knn_repulse.append(node_1)
 
-
 		return [knn_visual_nodes, knn_repulse]
 			
-	def knn_per_node(self, node_0):
-		'''	Lousy KNN algorithm implemented
-		TODO: implement fast algorithm that consider VISIONARY_FIELD
-		'''
-		dist_node = []
-		nodes = []
-		nodes_repulse = []
-
-		for node_1 in self.nodes:
-			dist = distance_between_nodes(node_0,node_1)
-			dn = [dist,node_1]
-			if dist != 0:
-				dist_node.append(dn)
-				if (dist < SEPERATION_TRESHOLD):
-					nodes_repulse.append(node_1)
-		dist_node.sort()
-		dist_node = dist_node[0:KNN_K]
-		for dn in dist_node:
-			nodes.append(dn[1])
-		return [nodes, nodes_repulse]
-			
-
 	def update_graph(self, node):
-		#for node in self.nodes:
-		print "updating graph node..."
-		#info = self.knn_per_node(node)
 		info = self.knn_visual(node)
 		knn = info[0]
 		knn_repulse = info[1]
@@ -241,6 +224,7 @@ class graph_state:
 		self.time = time
 		self.next = next
 
+#####
 		
 			
 #########################################################
@@ -261,12 +245,7 @@ def main():
 
 	g = Graph(nodes=nodes)
 	
-	for node in g.nodes:
-		print node.position_vector
-		#print node.orientation
-		print ""
 	
-
 	'''initialize linked list'''
 	head = graph_state(graph = g, time = timer)
 	tail = head
@@ -280,7 +259,6 @@ def main():
 			tail = temp
 			timer+=1
 
-	
 		
 if __name__ == '__main__':
 	main()

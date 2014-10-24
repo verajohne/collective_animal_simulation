@@ -44,7 +44,7 @@ def start_button():
 	'''
 	should I do a few updates every time step
 	'''
-
+	'''
 	while(timer < RUN_TIME):
 		for node in g.nodes:	
 			g.update_graph(node = node)
@@ -53,11 +53,26 @@ def start_button():
 			tail.next = temp
 			tail = temp
 			timer+=1
+	'''
+	while(timer < RUN_TIME):
+		count = 1
+		nodec = 1
+		print "" 
+		for node in g.nodes:
+			print nodec
+			nodec +=1
+			g.update_graph(node = node)
+			if count % 4:
+				g_state = copy.deepcopy(g)
+				temp = graph_state(graph = g_state, time = timer)
+			tail.next = temp
+			tail = temp
+			timer+=1
+			count +=1
 
 	#canvas.delete("all")
 	#canvas.pack()
 	while (head.next != None):
-		canvas.delete(ALL)
 		graph = head.graph
 		for node in graph.nodes:
 			canvas_coord = cartesian_to_canvas(node.position_vector)
@@ -69,17 +84,9 @@ def start_button():
 		head = head.next
 		GUI.update()
 		time.sleep(SLEEP_TIME)
+		canvas.delete(ALL)
 		#canvas.move("all", 100,100)
 
-	return
-
-def stop_button():
-	cartestion = np.array([-1,-1])
-	canvas_coord = cartesian_to_canvas(cartestion)
-	canvas.create_oval(canvas_coord[0] - RADIUS,canvas_coord[1] - RADIUS,canvas_coord[0] + RADIUS,canvas_coord[1] + RADIUS)
-	canvas.pack()
-	GUI.update()
-	print xy	
 	return
 
 
@@ -89,7 +96,6 @@ GUI = Tk()
 GUI.geometry("600x600")
 GUI.title("SHEEP SIMULATION")
 startButton = Button(GUI,text = "START", command = start_button).pack()
-stopButton = Button(GUI,text = "STOP", command = stop_button).pack()
 canvas = Canvas(GUI, heigh = CANVAS_HEIGHT,width = CANVAS_WIDTH,bg="green")
 canvas.pack()
 GUI.mainloop()
